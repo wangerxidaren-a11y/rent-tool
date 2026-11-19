@@ -1,0 +1,2418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>5月整租对比工具 · v2.4</title>
+  <!-- 引入 Inter 字体与 Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+          },
+          colors: {
+            alabaster: '#FAFAF9',
+            ink: {
+              DEFAULT: '#18181B',
+              secondary: '#52525B',
+              muted: '#71717A',
+            },
+            hairline: '#E4E4E7',
+            dream: '#E11D48',
+          },
+          boxShadow: {
+            'card': '0 1px 2px rgba(24, 24, 27, 0.04)',
+            'float': '0 16px 36px -8px rgba(24, 24, 27, 0.16), 0 0 0 1px rgba(24, 24, 27, 0.06)',
+            'sticky-right': '4px 0 12px -4px rgba(24, 24, 27, 0.08)',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    :root {
+      --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    html, body {
+      background-color: #FAFAF9;
+      color: #18181B;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+
+    /* 等宽数字对齐 */
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 隐藏横向滚动条 */
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Emil Kowalski 物理微交互阻尼曲线 */
+    .btn-tactile {
+      transition: transform 160ms var(--ease-out-quint),
+                  background-color 160ms var(--ease-out-quint),
+                  border-color 160ms var(--ease-out-quint),
+                  color 160ms var(--ease-out-quint),
+                  box-shadow 160ms var(--ease-out-quint),
+                  opacity 160ms var(--ease-out-quint);
+    }
+    .btn-tactile:active {
+      transform: scale(0.97);
+    }
+
+    /* 弹窗与抽屉入场动画 */
+    @keyframes panelReveal {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    .animate-panel {
+      animation: panelReveal 240ms var(--ease-out-quint) forwards;
+    }
+
+    /* Toast 入场动画 */
+    @keyframes toastDrop {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -12px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+    }
+    .animate-toast {
+      animation: toastDrop 220ms var(--ease-out-quint) forwards;
+    }
+
+    /* 对比表格首列冻结 */
+    .sticky-col {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body class="bg-alabaster text-ink font-sans antialiased selection:bg-zinc-900 selection:text-white">
+
+  <!-- ==================== 全局 Toast 提示容器 ==================== -->
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[92%] max-w-md flex flex-col gap-2"></div>
+
+  <!-- ==================== 全局确认弹窗（替代 confirm） ==================== -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-zinc-950/45 backdrop-blur-[2px] p-4" role="dialog" aria-modal="true" onclick="if(event.target===this) closeConfirmModal()">
+    <div class="animate-panel bg-white rounded-2xl max-w-sm w-full p-5 shadow-float border border-hairline">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 id="confirm-title" class="text-sm font-semibold text-ink">确认操作</h3>
+          <p id="confirm-message" class="text-xs text-ink-secondary mt-1.5 leading-relaxed"></p>
+        </div>
+      </div>
+      <div class="mt-5 flex items-center justify-end gap-2">
+        <button id="confirm-cancel-btn" type="button" class="btn-tactile px-3.5 py-2 rounded-xl text-xs font-medium text-ink-secondary bg-zinc-100 hover:bg-zinc-200/80">取消</button>
+        <button id="confirm-ok-btn" type="button" class="btn-tactile px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800">确认执行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 全局通勤与月成本参数抽屉 ==================== -->
+  <div id="settings-modal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-zinc-950/45 backdrop-blur-[2px] sm:p-4" role="dialog" aria-modal="true" onclick="if(event.target===this) closeSettingsModal()">
+    <div class="animate-panel bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl p-5 shadow-float border border-hairline">
+      <div class="flex items-center justify-between pb-3.5 border-b border-hairline">
+        <div>
+          <h2 class="text-sm sm:text-base font-semibold text-ink">通勤与月成本折算参数</h2>
+          <p class="text-xs text-ink-muted mt-0.5">保存后实时重算所有房源的纯现金支出与真实月总成本</p>
+        </div>
+        <button type="button" onclick="closeSettingsModal()" aria-label="关闭设置抽屉" class="btn-tactile p-2 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <form onsubmit="saveGlobalSettings(event)" class="mt-4 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1">所在城市</label>
+            <input id="set-city" type="text" required class="w-full rounded-xl border border-hairline px-3 py-2 text-sm text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1">公司 / 目标上班地点</label>
+            <input id="set-destination" type="text" required class="w-full rounded-xl border border-hairline px-3 py-2 text-sm text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1">通勤时间折现时薪 (元/时)</label>
+            <input id="set-hourlyRate" type="number" min="0" max="500" required class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-sm font-medium text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1">每月工作日天数 (天/月)</label>
+            <input id="set-workdays" type="number" min="1" max="31" required class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-sm font-medium text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+        </div>
+        <p class="text-[11px] text-ink-muted leading-relaxed bg-alabaster p-3 rounded-xl border border-hairline">
+          真实月总成本 = 挂牌月租 + 每月固定杂费 + 每月通勤交通费（单程票价 × 2 × 工作日） + 一次性费用月摊销（÷ 12） + 通勤时间折现（单程分钟 ÷ 60 × 2 × 工作日 × 时薪）
+        </p>
+
+        <div class="pt-3.5 border-t border-hairline flex items-center justify-end gap-2">
+          <button type="button" onclick="closeSettingsModal()" class="btn-tactile px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-xs font-medium text-ink-secondary">取消</button>
+          <button type="submit" class="btn-tactile px-5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-semibold text-white">保存参数</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 全屏看房实拍图灯箱 Lightbox ==================== -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 hidden flex-col bg-zinc-950/96 text-white select-none" role="dialog" aria-modal="true">
+    <div class="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-white/10">
+      <div class="min-w-0">
+        <div id="lb-title" class="text-sm font-semibold text-white truncate">室内实拍预览</div>
+        <div id="lb-caption" class="text-xs text-zinc-400 truncate mt-0.5">照片说明</div>
+      </div>
+      <div class="flex items-center gap-3 shrink-0">
+        <span id="lb-counter" class="tabular-nums text-xs font-medium text-zinc-300 bg-white/10 px-2.5 py-1 rounded-lg">1 / 1</span>
+        <button type="button" onclick="closeLightbox()" aria-label="关闭大图预览" class="btn-tactile p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 relative flex items-center justify-center p-4 overflow-hidden" onclick="if(event.target===this) closeLightbox()">
+      <button type="button" onclick="stepLightbox(-1)" aria-label="上一张" class="btn-tactile absolute left-3 sm:left-6 z-10 p-2.5 rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/15 backdrop-blur-xs">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+        </svg>
+      </button>
+      <img id="lb-image" src="" alt="房间实拍大图" class="animate-panel max-h-[72vh] max-w-full rounded-xl object-contain shadow-2xl" />
+      <button type="button" onclick="stepLightbox(1)" aria-label="下一张" class="btn-tactile absolute right-3 sm:right-6 z-10 p-2.5 rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/15 backdrop-blur-xs">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+        </svg>
+      </button>
+    </div>
+
+    <div id="lb-thumbs" class="no-scrollbar px-4 py-3 border-t border-white/10 flex items-center justify-center gap-2 overflow-x-auto"></div>
+  </div>
+
+  <!-- ==================== 顶部固定栏 ==================== -->
+  <header class="sticky top-0 z-30 bg-alabaster/92 backdrop-blur-md border-b border-hairline">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <h1 class="text-sm sm:text-base font-bold tracking-tight text-ink truncate">5月整租对比工具</h1>
+            <span class="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-zinc-100 text-ink-secondary border border-hairline shrink-0">v2.4</span>
+          </div>
+          <p id="header-subtitle" class="tabular-nums text-[11px] text-ink-muted truncate mt-0.5">重庆 · 解放碑CBD · 30元/时 · 22天/月</p>
+        </div>
+      </div>
+
+      <button type="button" onclick="openSettingsModal()" class="btn-tactile px-3 py-1.5 rounded-xl bg-white border border-hairline hover:bg-zinc-50 text-ink text-xs font-semibold inline-flex items-center gap-1.5 shadow-card shrink-0">
+        <svg class="w-3.5 h-3.5 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/>
+        </svg>
+        <span>通勤与参数</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== 主内容容器（底部留白 pb-32 = 128px） ==================== -->
+  <main class="max-w-4xl mx-auto px-4 pt-4 pb-32">
+
+    <!-- ==================== 视图 1：房源清单 ==================== -->
+    <section id="view-listings" class="space-y-4">
+      <div class="bg-white rounded-2xl p-3.5 border border-hairline shadow-card space-y-3">
+        <!-- 状态筛选栏：全部 | 梦中情房（玫瑰红心）| 待看 | 已看 | 已淘汰 -->
+        <div id="status-pills-row" class="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-0.5"></div>
+
+        <!-- 排序与快捷操作 -->
+        <div class="flex items-center justify-between gap-2 pt-2.5 border-t border-hairline">
+          <select id="sort-select" onchange="appState.sortBy=this.value; renderListingsView();" aria-label="排序依据" class="flex-1 max-w-[235px] rounded-xl bg-zinc-100 text-ink text-xs font-semibold px-3 py-2 border border-transparent focus:border-zinc-900 focus:bg-white focus:outline-none">
+            <option value="trueCostAsc">真实月总成本 (低→高)</option>
+            <option value="cashCostAsc">纯现金月支出 (低→高)</option>
+            <option value="commuteAsc">单程通勤 (短→长)</option>
+            <option value="scoreDesc">体验评分 (高→低)</option>
+          </select>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button id="sample-toggle-btn" type="button" onclick="handleSampleToggle()" class="btn-tactile px-3 py-2 rounded-xl bg-white border border-hairline hover:bg-zinc-50 text-ink-secondary text-xs font-semibold">
+              清空示例
+            </button>
+            <button type="button" onclick="openNewListingForm()" class="btn-tactile px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold inline-flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+              </svg>
+              <span>录入</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 房源卡片列表网格 -->
+      <div id="listings-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- ==================== 视图 2：录入 / 编辑房源 ==================== -->
+    <section id="view-editor" class="hidden space-y-4">
+      <!-- 智能粘贴识别框（支持分享文案 / 截屏OCR文字 / 微信小程序口令） -->
+      <div class="bg-white rounded-2xl border border-zinc-300 shadow-card overflow-hidden">
+        <button type="button" onclick="toggleSmartParserBox()" class="w-full px-4 py-3.5 flex items-center justify-between gap-2 text-left hover:bg-alabaster transition">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-zinc-900 text-white flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/>
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-xs sm:text-sm font-bold text-ink truncate">智能粘贴识别 (分享文案 / 截图OCR文字 / 小程序口令)</h2>
+              <p class="text-[11px] text-ink-muted truncate mt-0.5">自动提取 #小程序:// 口令或网页链接，正则填充租金、面积、户型与水电</p>
+            </div>
+          </div>
+          <svg id="parser-chevron" class="w-4 h-4 text-ink-secondary shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5"/>
+          </svg>
+        </button>
+
+        <div id="smart-parser-body" class="px-4 pb-4 pt-1 border-t border-hairline space-y-3">
+          <div class="flex flex-wrap items-center justify-end gap-1.5 pt-2">
+            <button type="button" onclick="fillDemoMiniProgramOnly()" class="btn-tactile px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary text-[11px] font-semibold">
+              测试纯小程序口令
+            </button>
+            <button type="button" onclick="fillDemoOcrAndMiniProgram()" class="btn-tactile px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary text-[11px] font-semibold">
+              测试OCR文案+口令
+            </button>
+          </div>
+
+          <textarea id="smart-share-input" rows="3" placeholder="在此粘贴贝壳/链家/自如/58/小红书分享文案、手机截屏 OCR 提取文字，或 #小程序://... 微信口令..." class="w-full rounded-xl border border-hairline bg-alabaster p-3 text-xs text-ink placeholder-zinc-400 focus:bg-white focus:border-zinc-900 focus:outline-none"></textarea>
+
+          <div id="smart-parse-notice" class="hidden rounded-xl p-3 text-xs leading-relaxed"></div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="pasteFromClipboard()" class="btn-tactile px-3 py-1.5 rounded-xl bg-white border border-hairline hover:bg-zinc-50 text-ink text-xs font-semibold inline-flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/>
+                </svg>
+                <span>粘贴剪贴板</span>
+              </button>
+              <button type="button" onclick="clearSmartParser()" class="btn-tactile px-2.5 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary text-xs font-medium">清空</button>
+            </div>
+            <button type="button" onclick="extractFromSharedText()" class="btn-tactile px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold">
+              智能提取并填表
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 房源录入主表单 -->
+      <form id="listing-form" onsubmit="saveListingForm(event)" class="space-y-4">
+        <input type="hidden" id="f-id" value="" />
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-hairline">
+            <h2 id="editor-heading" class="text-sm sm:text-base font-bold text-ink">录入新房源</h2>
+            <button type="button" onclick="resetListingForm()" class="btn-tactile px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary text-xs font-medium">重置表单</button>
+          </div>
+
+          <!-- 「梦中情房」玫瑰红心开关 -->
+          <label class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-rose-50/70 border border-rose-200 cursor-pointer select-none">
+            <div>
+              <div class="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                <svg id="f-dream-icon" class="w-4 h-4 text-dream" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
+                </svg>
+                <span>标记为「梦中情房」</span>
+              </div>
+              <p class="text-[11px] text-rose-700 mt-0.5">开启后将在房源清单顶部的「梦中情房」筛选胶囊中置顶展示</p>
+            </div>
+            <input id="f-isDream" type="checkbox" onchange="syncFormDreamIcon()" class="w-5 h-5 rounded accent-[#E11D48] cursor-pointer shrink-0" />
+          </label>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">房源标题 <span class="text-rose-600">*</span></label>
+              <input id="f-title" type="text" required placeholder="如：南岸·南滨路江景精装一居" class="w-full rounded-xl border border-hairline px-3 py-2.5 text-sm text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">小区 / 具体位置</label>
+              <input id="f-community" type="text" placeholder="如：东原1891印长江" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">区域 / 最近地铁站</label>
+              <input id="f-district" type="text" placeholder="如：南滨路 · 海棠溪站" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">看房状态</label>
+              <select id="f-status" class="w-full rounded-xl border border-hairline bg-white px-3 py-2 text-xs font-medium text-ink focus:border-zinc-900 focus:outline-none">
+                <option value="待看">待看</option>
+                <option value="已看">已看</option>
+                <option value="已淘汰">已淘汰</option>
+              </select>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-ink-secondary">原房源链接 / 小程序口令</label>
+                <span id="f-linkType-badge" class="hidden px-2 py-0.5 rounded-md text-[10px] font-semibold"></span>
+              </div>
+              <input id="f-sourceLink" type="text" oninput="updateLinkTypeBadge()" placeholder="https://... 或 #小程序://..." class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 租金与月度算账参数 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-ink-muted pb-2 border-b border-hairline">租金与月度算账</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">挂牌月租 (元/月) <span class="text-rose-600">*</span></label>
+              <input id="f-rent" type="number" min="0" required placeholder="2750" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-sm font-semibold text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">押付方式</label>
+              <select id="f-paymentTerm" class="w-full rounded-xl border border-hairline bg-white px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none">
+                <option value="押一付一">押一付一</option>
+                <option value="押一付三" selected>押一付三</option>
+                <option value="押二付一">押二付一</option>
+                <option value="半年付">半年付</option>
+                <option value="年付">年付</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">水电类型</label>
+              <select id="f-utilityType" class="w-full rounded-xl border border-hairline bg-white px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none">
+                <option value="民水民电">民水民电</option>
+                <option value="商水商电">商水商电</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">每月固定杂费 (物业/宽带/水电差)</label>
+              <input id="f-fixedMisc" type="number" min="0" value="150" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">一次性费用 (中介/搬家 ÷ 12)</label>
+              <input id="f-oneTimeCost" type="number" min="0" value="1300" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">单程交通费 (元/次)</label>
+              <input id="f-singleFare" type="number" step="0.5" min="0" value="3" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 房屋规格、装修风格、亮点与瑕疵列表 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-ink-muted pb-2 border-b border-hairline">房屋规格、风格与瑕疵记录</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">建筑面积 (㎡) <span class="text-rose-600">*</span></label>
+              <input id="f-area" type="number" step="0.1" min="5" required placeholder="48" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">户型</label>
+              <input id="f-layout" type="text" value="1室1厅" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">楼层与电梯</label>
+              <input id="f-floorInfo" type="text" value="电梯中高区" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-ink-secondary mb-1">朝向与采光</label>
+              <input id="f-orientation" type="text" value="朝南看江" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+            <div class="col-span-2 sm:col-span-2">
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-ink-secondary">单程通勤 (分钟)</label>
+                <button type="button" onclick="openAmapFromEditor()" class="text-[11px] font-semibold text-ink underline underline-offset-2">高德查通勤</button>
+              </div>
+              <input id="f-commuteMinutes" type="number" min="0" max="240" value="25" oninput="updateLiveFormCost()" class="tabular-nums w-full rounded-xl border border-hairline px-3 py-2 text-xs font-semibold text-ink focus:border-zinc-900 focus:outline-none" />
+            </div>
+          </div>
+
+          <!-- 装修风格预设标签 -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-ink-secondary">装修风格（点击预设或自定义输入）</label>
+            <div id="style-presets-row" class="flex flex-wrap gap-1.5"></div>
+            <input id="f-style" type="text" value="现代简约" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+
+          <!-- 体验评分滑块 (1~10) -->
+          <div class="bg-alabaster rounded-xl p-3 border border-hairline">
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="f-score" class="text-xs font-semibold text-ink-secondary">居住体验评分 (1.0 - 10.0)</label>
+              <span id="f-score-val" class="tabular-nums text-xs font-bold text-ink">8.5 分</span>
+            </div>
+            <input id="f-score" type="range" min="1" max="10" step="0.5" value="8.5" oninput="document.getElementById('f-score-val').textContent=Number(this.value).toFixed(1)+' 分'" class="w-full accent-zinc-900 cursor-pointer" />
+          </div>
+
+          <!-- 亮点标签 -->
+          <div>
+            <label class="block text-xs font-semibold text-ink-secondary mb-1">核心亮点标签（逗号或顿号分隔）</label>
+            <input id="f-highlights" type="text" placeholder="如：一线江景, 双层中空玻璃, 近地铁口, 独立厨卫" class="w-full rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-zinc-900 focus:outline-none" />
+          </div>
+
+          <!-- 明显瑕疵/硬伤列表（逐条添加与删除） -->
+          <div class="space-y-2">
+            <label class="block text-xs font-semibold text-rose-600">明显瑕疵 / 硬伤列表（支持逐条添加与删除）</label>
+            <div id="editor-flaws-list" class="flex flex-wrap gap-1.5"></div>
+            <div class="flex gap-2">
+              <input id="f-new-flaw-input" type="text" placeholder="输入一条瑕疵，如：江边低楼层略潮、卫生间无干湿分离..." onkeydown="if(event.key==='Enter'){event.preventDefault(); addDraftFlaw();}" class="flex-1 rounded-xl border border-hairline px-3 py-2 text-xs text-ink focus:border-rose-500 focus:outline-none" />
+              <button type="button" onclick="addDraftFlaw()" class="btn-tactile px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold shrink-0">添加瑕疵</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 室内实拍图多选上传与 Canvas 压缩 -->
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-ink">房间内部与江景实拍图</h3>
+              <p class="text-xs text-ink-muted mt-0.5">相册多选自动用 Canvas 压缩至最大宽 800px JPEG (质量 0.72)，支持填写备注</p>
+            </div>
+            <label class="btn-tactile px-3.5 py-2 rounded-xl bg-white border border-hairline hover:bg-zinc-50 text-ink text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5 shrink-0">
+              <svg class="w-4 h-4 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z"/>
+              </svg>
+              <span>相册选图</span>
+              <input type="file" accept="image/*" multiple onchange="handleEditorPhotoUpload(event)" class="hidden" />
+            </label>
+          </div>
+          <div id="editor-photos-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5"></div>
+        </div>
+
+        <!-- 实时算账预览条 + 提交按钮 -->
+        <div class="bg-zinc-900 text-white rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-[11px] text-zinc-400">实时测算 · 真实月总成本 / 纯现金月支出</div>
+            <div class="tabular-nums flex items-baseline gap-2.5 mt-0.5">
+              <span id="live-true-cost" class="text-lg font-bold">¥0/月</span>
+              <span id="live-cash-cost" class="text-xs text-zinc-300">纯现金 ¥0/月</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="switchView('listings')" class="btn-tactile px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200">取消</button>
+            <button type="submit" class="btn-tactile px-5 py-2 rounded-xl bg-white hover:bg-zinc-100 text-xs font-bold text-ink">保存房源</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- ==================== 视图 3：决赛圈并排对比（2~4 套） ==================== -->
+    <section id="view-compare" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-4 border border-hairline shadow-card space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-ink">决赛圈并排对比 (2–4 套横向滑动)</h2>
+            <p class="text-xs text-ink-muted mt-0.5">左侧维度冻结，自动标绿最优项、标红偏高项；点击缩略图可打开全屏灯箱</p>
+          </div>
+          <button type="button" onclick="autoPickTop3()" class="btn-tactile px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold inline-flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+            </svg>
+            <span>自动选最优前3套</span>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-hairline">
+          <div id="compare-selected-chips" class="flex flex-wrap items-center gap-1.5"></div>
+          <select id="compare-add-dropdown" onchange="addCompareFromSelect(this)" aria-label="追加对比房源" class="rounded-xl bg-zinc-100 text-ink text-xs font-semibold px-3 py-1.5 border border-transparent focus:border-zinc-900 focus:outline-none">
+            <option value="">+ 追加房源进对比...</option>
+          </select>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-5 pt-3 border-t border-hairline">
+          <label class="inline-flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
+            <input id="chk-diff-only" type="checkbox" onchange="renderCompareView()" class="w-4 h-4 rounded accent-zinc-900" />
+            <span>仅看差异项</span>
+          </label>
+          <label class="inline-flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
+            <input id="chk-hide-commute" type="checkbox" onchange="renderCompareView()" class="w-4 h-4 rounded accent-zinc-900" />
+            <span>隐藏通勤折现（纯现金视角）</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="compare-content-area" class="space-y-4"></div>
+    </section>
+
+    <!-- ==================== 视图 4：数据备份与恢复 ==================== -->
+    <section id="view-backup" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-ink">本地浏览器存储空间监控 (含压缩实拍图)</span>
+          <span id="storage-usage-label" class="tabular-nums text-xs font-semibold text-ink-secondary">0 KB / 5.00 MB (0%)</span>
+        </div>
+        <div class="w-full h-2 bg-zinc-100 rounded-full overflow-hidden">
+          <div id="storage-usage-bar" class="h-full bg-zinc-900 rounded-full transition-all duration-300" style="width: 3%"></div>
+        </div>
+        <p class="text-xs text-ink-muted leading-relaxed">所有房源记录与压缩后的实拍图均存储在当前浏览器本地。建议看房后复制 JSON 文本存入微信收藏或备忘录，方便换机或清理缓存后一键恢复。</p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline shadow-card space-y-4">
+        <div>
+          <h2 class="text-sm sm:text-base font-bold text-ink">JSON 备份导出与恢复</h2>
+          <p class="text-xs text-ink-muted mt-0.5">完整包含房源信息、梦中情房标记、小程序口令/链接、压缩实拍图与通勤参数</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button type="button" onclick="downloadBackupFile()" class="btn-tactile p-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white flex items-center gap-3 text-left">
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+            </svg>
+            <div>
+              <div class="text-xs font-bold">下载 .json 备份文件</div>
+              <div class="text-[11px] text-zinc-400 mt-0.5">保存标准 JSON 文件到本地设备</div>
+            </div>
+          </button>
+
+          <button type="button" onclick="copyBackupText()" class="btn-tactile p-3.5 rounded-xl bg-white hover:bg-zinc-50 text-ink border border-hairline flex items-center gap-3 text-left">
+            <svg class="w-5 h-5 text-ink-secondary shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/>
+            </svg>
+            <div>
+              <div class="text-xs font-bold">一键复制 JSON 文本</div>
+              <div class="text-[11px] text-ink-muted mt-0.5">手机端推荐，直接粘贴存微信收藏</div>
+            </div>
+          </button>
+        </div>
+
+        <div class="pt-4 border-t border-hairline space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <label for="backup-import-textarea" class="text-xs font-bold text-ink">数据恢复 (选择文件或粘贴文本)</label>
+            <label class="btn-tactile px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-ink text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+              </svg>
+              <span>选择 .json 文件</span>
+              <input type="file" accept=".json,application/json" onchange="handleBackupFileSelect(event)" class="hidden" />
+            </label>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-4 p-3 rounded-xl bg-alabaster border border-hairline">
+            <span class="text-xs font-semibold text-ink-secondary">恢复模式：</span>
+            <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-ink cursor-pointer">
+              <input type="radio" name="restore-mode" value="merge" checked class="accent-zinc-900" />
+              <span>合并追加（去重）</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 cursor-pointer">
+              <input type="radio" name="restore-mode" value="overwrite" class="accent-rose-600" />
+              <span>覆盖恢复</span>
+            </label>
+          </div>
+
+          <textarea id="backup-import-textarea" rows="5" placeholder="在此粘贴之前复制的 JSON 备份文本..." class="w-full rounded-xl border border-hairline bg-alabaster p-3 text-xs font-mono text-ink focus:bg-white focus:border-zinc-900 focus:outline-none"></textarea>
+
+          <div id="backup-status-banner" class="hidden rounded-xl p-3 text-xs font-semibold"></div>
+
+          <div class="flex justify-end">
+            <button type="button" onclick="restoreFromTextarea()" class="btn-tactile px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold">
+              校验并执行恢复
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== 移动端/桌面端固定全宽四等分底部导航栏 ==================== -->
+  <nav class="fixed bottom-0 left-0 right-0 w-full z-40 bg-white/95 backdrop-blur border-t border-zinc-200 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5" aria-label="主导航">
+    <div class="max-w-2xl mx-auto w-full grid grid-cols-4 gap-1 px-2">
+      <button type="button" data-nav-view="listings" onclick="switchView('listings')" class="nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink font-bold">
+        <span class="relative inline-flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+          </svg>
+        </span>
+        <span class="text-[11px] leading-none whitespace-nowrap">房源清单</span>
+      </button>
+
+      <button type="button" data-nav-view="editor" onclick="openNewListingForm()" class="nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink-muted font-medium">
+        <span class="relative inline-flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+          </svg>
+        </span>
+        <span class="text-[11px] leading-none whitespace-nowrap">录入房源</span>
+      </button>
+
+      <button type="button" data-nav-view="compare" onclick="switchView('compare')" class="nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink-muted font-medium">
+        <span class="relative inline-flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z"/>
+          </svg>
+          <span id="nav-compare-badge" class="tabular-nums absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-zinc-900 text-white text-[10px] font-bold flex items-center justify-center">3</span>
+        </span>
+        <span class="text-[11px] leading-none whitespace-nowrap">并排对比</span>
+      </button>
+
+      <button type="button" data-nav-view="backup" onclick="switchView('backup')" class="nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink-muted font-medium">
+        <span class="relative inline-flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375"/>
+          </svg>
+        </span>
+        <span class="text-[11px] leading-none whitespace-nowrap">数据备份</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==================== 核心脚本 ==================== -->
+  <script>
+    const STORAGE_KEY = 'may_solo_rent_v2_4_final';
+
+    const DEFAULT_SETTINGS = {
+      city: '重庆',
+      destination: '解放碑CBD',
+      hourlyRate: 30,
+      workdays: 22
+    };
+
+    const STYLE_PRESETS = [
+      '原木奶油风',
+      '现代简约',
+      '精装公寓',
+      '普通居家简装',
+      '老破小简装'
+    ];
+
+    // 生成离线 SVG 建筑室内示意图（清晰标注，零外部图片依赖）
+    function createOfflineRoomSvg(title, subtitle, bgHex, accentHex) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">
+        <rect width="800" height="480" fill="${bgHex}"/>
+        <rect x="44" y="42" width="320" height="256" rx="10" fill="#FFFFFF" fill-opacity="0.82" stroke="${accentHex}" stroke-width="2"/>
+        <line x1="204" y1="42" x2="204" y2="298" stroke="${accentHex}" stroke-width="2"/>
+        <line x1="44" y1="170" x2="364" y2="170" stroke="${accentHex}" stroke-width="2"/>
+        <path d="M408 298 Q 515 246, 620 274 T 756 254 L 756 298 Z" fill="${accentHex}" fill-opacity="0.16"/>
+        <rect x="408" y="114" width="348" height="118" rx="10" fill="#FFFFFF" fill-opacity="0.72" stroke="${accentHex}" stroke-width="1.5"/>
+        <rect x="0" y="372" width="800" height="108" fill="#18181B" fill-opacity="0.86"/>
+        <text x="44" y="418" fill="#FAFAF9" font-family="sans-serif" font-size="22" font-weight="600">${title}</text>
+        <text x="44" y="448" fill="#A1A1AA" font-family="sans-serif" font-size="16">${subtitle}</text>
+      </svg>`;
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    // 预置 3 套贴近真实的重庆靠江整租示例房源
+    function getChongqingSampleListings() {
+      return [
+        {
+          id: 'cq_sample_1',
+          isSample: true,
+          isDream: true,
+          status: '已看',
+          title: '南岸·南滨路江景精装一居',
+          community: '东原1891印长江',
+          district: '南滨路 · 海棠溪站',
+          sourceLink: '#小程序://贝壳丨二手房新房租房装修/tV3PZ3AUkgBSSKJ',
+          rent: 2750,
+          paymentTerm: '押一付三',
+          fixedMonthlyMisc: 145,
+          singleFare: 3,
+          oneTimeCost: 1375,
+          area: 48,
+          layout: '1室1厅',
+          floorInfo: '电梯 19/33层',
+          orientation: '朝南一线江景',
+          commuteMinutes: 24,
+          utilityType: '民水民电',
+          score: 9.0,
+          style: '现代简约',
+          highlights: ['一线江景', '双层中空隔音玻璃', '民水民电', '独立厨卫'],
+          flaws: ['厨房偏小无明火'],
+          photos: [
+            {
+              dataUrl: createOfflineRoomSvg('室内示意 · 客厅江景落地窗', '19层高层干燥无返潮 · 双层中空玻璃', '#F4F4F5', '#52525B'),
+              caption: '客厅江景采光(示意)'
+            },
+            {
+              dataUrl: createOfflineRoomSvg('室内示意 · 开放式轻食吧台', '嵌入式电磁炉 · 无明火燃气', '#F5F5F4', '#78716C'),
+              caption: '厨房细节(示意)'
+            }
+          ]
+        },
+        {
+          id: 'cq_sample_2',
+          isSample: true,
+          isDream: false,
+          status: '待看',
+          title: '渝中·朝天门滨江公寓',
+          community: '朝天门滨江国际公寓',
+          district: '渝中区 · 小什字站',
+          sourceLink: '#小程序://贝壳丨二手房新房租房装修/kM9QX2BLmnRTY88',
+          rent: 2250,
+          paymentTerm: '押一付三',
+          fixedMonthlyMisc: 295,
+          singleFare: 2,
+          oneTimeCost: 1125,
+          area: 41,
+          layout: '1室1厅',
+          floorInfo: '电梯 5/26层',
+          orientation: '朝南全明采光',
+          commuteMinutes: 14,
+          utilityType: '商水商电',
+          score: 7.0,
+          style: '精装公寓',
+          highlights: ['步行江边5分钟', '近地铁口'],
+          flaws: ['江边低楼层略潮', '商电空调费偏高'],
+          photos: [
+            {
+              dataUrl: createOfflineRoomSvg('室内示意 · 滨江公寓全景', '5楼近江面绿化带 · 商水商电单价较高', '#F4F4F5', '#71717A'),
+              caption: '室内全景(示意)'
+            }
+          ]
+        },
+        {
+          id: 'cq_sample_3',
+          isSample: true,
+          isDream: false,
+          status: '已看',
+          title: '江北·北滨路次新电梯两居',
+          community: '鎏嘉码头旁次新小区',
+          district: '北滨路 · 华新街站',
+          sourceLink: 'https://cq.zu.ke.com/zufang/CQ2048003.html',
+          rent: 2680,
+          paymentTerm: '押一付一',
+          fixedMonthlyMisc: 130,
+          singleFare: 2.5,
+          oneTimeCost: 350,
+          area: 62,
+          layout: '2室1厅',
+          floorInfo: '电梯 11/28层',
+          orientation: '东南侧看江景',
+          commuteMinutes: 20,
+          utilityType: '民水民电',
+          score: 8.5,
+          style: '原木奶油风',
+          highlights: ['步行江边5分钟', '民水民电', '房东直租无中介', '空间宽敞'],
+          flaws: ['卫生间无干湿分离', '临江夜风声'],
+          photos: [
+            {
+              dataUrl: createOfflineRoomSvg('室内示意 · 主卧原木奶油风', '次新电梯房 · 押一付一资金压力小', '#FAF5FF', '#6B7280'),
+              caption: '主卧实拍(示意)'
+            }
+          ]
+        }
+      ];
+    }
+
+    // ==================== 全局状态与持久化 ====================
+    let appState = {
+      settings: { ...DEFAULT_SETTINGS },
+      listings: [],
+      selectedIds: [],
+      activeView: 'listings',
+      statusFilter: 'ALL',
+      sortBy: 'trueCostAsc',
+      parserExpanded: true
+    };
+
+    let editorDraftFlaws = [];
+    let editorDraftPhotos = [];
+    let lightboxState = { title: '', photos: [], index: 0 };
+
+    function initApp() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          appState.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+          appState.listings = Array.isArray(parsed.listings) ? parsed.listings : getChongqingSampleListings();
+          appState.selectedIds = Array.isArray(parsed.selectedIds)
+            ? parsed.selectedIds.filter(id => appState.listings.some(l => l.id === id)).slice(0, 4)
+            : [];
+        } else {
+          appState.listings = getChongqingSampleListings();
+          appState.selectedIds = appState.listings.map(l => l.id);
+          saveAppState();
+        }
+      } catch (e) {
+        appState.listings = getChongqingSampleListings();
+        appState.selectedIds = appState.listings.map(l => l.id);
+      }
+
+      renderStylePresets();
+      updateHeaderSubtitle();
+      updateNavBadges();
+      renderListingsView();
+      updateStorageMonitor();
+
+      document.addEventListener('keydown', handleGlobalKeydown);
+    }
+
+    function saveAppState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          settings: appState.settings,
+          listings: appState.listings,
+          selectedIds: appState.selectedIds
+        }));
+        updateNavBadges();
+        updateStorageMonitor();
+      } catch (err) {
+        showToast('本地存储空间接近上限，建议删除多余照片或导出 JSON 备份');
+      }
+    }
+
+    function updateHeaderSubtitle() {
+      const s = appState.settings;
+      document.getElementById('header-subtitle').textContent =
+        `${s.city} · ${s.destination} · ${s.hourlyRate}元/时 · ${s.workdays}天/月`;
+    }
+
+    function updateNavBadges() {
+      const badge = document.getElementById('nav-compare-badge');
+      if (appState.selectedIds.length > 0) {
+        badge.textContent = appState.selectedIds.length;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+
+      const hasSamples = appState.listings.some(l => l.isSample);
+      const toggleBtn = document.getElementById('sample-toggle-btn');
+      if (toggleBtn) {
+        toggleBtn.textContent = hasSamples ? '清空示例' : '恢复示例';
+      }
+    }
+
+    // 全局键盘无障碍：ESC 逐层关闭灯箱/弹窗/抽屉；灯箱支持左右方向键切换
+    function handleGlobalKeydown(e) {
+      const lb = document.getElementById('lightbox-modal');
+      if (!lb.classList.contains('hidden')) {
+        if (e.key === 'Escape') { closeLightbox(); return; }
+        if (e.key === 'ArrowLeft') { stepLightbox(-1); return; }
+        if (e.key === 'ArrowRight') { stepLightbox(1); return; }
+      }
+      const confirmModal = document.getElementById('confirm-modal');
+      if (!confirmModal.classList.contains('hidden') && e.key === 'Escape') {
+        closeConfirmModal();
+        return;
+      }
+      const settingsModal = document.getElementById('settings-modal');
+      if (!settingsModal.classList.contains('hidden') && e.key === 'Escape') {
+        closeSettingsModal();
+      }
+    }
+
+    // ==================== 链接类型识别 & 安全复制工具 ====================
+    function detectLinkType(linkStr) {
+      const s = (linkStr || '').trim();
+      if (!s) return 'none';
+      if (s.startsWith('#小程序://')) return 'miniprogram';
+      if (/^https?:\/\//i.test(s)) return 'web';
+      return 'other';
+    }
+
+    // 优先使用 document.execCommand('copy') 兼容 iframe 与移动端
+    function copyTextSafely(text, successMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (e) {
+        ok = false;
+      }
+      document.body.removeChild(ta);
+
+      if (ok) {
+        showToast(successMsg);
+      } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => showToast(successMsg))
+          .catch(() => showToast('复制受限，请手动长按复制'));
+      } else {
+        showToast('当前环境不支持自动复制，请手动长按复制');
+      }
+    }
+
+    function copyMiniProgramLink(id) {
+      const item = appState.listings.find(l => l.id === id);
+      if (!item || !item.sourceLink) return;
+      copyTextSafely(
+        item.sourceLink,
+        '已复制小程序口令，去微信粘贴发给「文件传输助手」即可点开原房源'
+      );
+    }
+
+    // ==================== 真实月总成本计算引擎 & 高德免Key路线 ====================
+    function calcListingMetrics(item) {
+      const s = appState.settings;
+      const workdays = Math.max(1, Number(s.workdays) || 22);
+      const hourlyRate = Math.max(0, Number(s.hourlyRate) || 0);
+
+      const rent = Number(item.rent) || 0;
+      const fixedMisc = Number(item.fixedMonthlyMisc) || 0;
+      const singleFare = Number(item.singleFare) || 0;
+      const monthlyTransit = singleFare * 2 * workdays;
+      const oneTimeCost = Number(item.oneTimeCost) || 0;
+      const amortizedOneTime = oneTimeCost / 12;
+
+      const commuteMins = Number(item.commuteMinutes) || 0;
+      const commuteDiscount = (commuteMins / 60) * 2 * workdays * hourlyRate;
+
+      const pureCashMonthly = rent + fixedMisc + monthlyTransit + amortizedOneTime;
+      const trueMonthlyCost = pureCashMonthly + commuteDiscount;
+      const area = Math.max(1, Number(item.area) || 1);
+
+      return {
+        rent,
+        fixedMisc,
+        singleFare,
+        monthlyTransit,
+        oneTimeCost,
+        amortizedOneTime,
+        commuteMins,
+        commuteDiscount,
+        pureCashMonthly,
+        trueMonthlyCost,
+        pricePerSqm: trueMonthlyCost / area,
+        cashPricePerSqm: pureCashMonthly / area
+      };
+    }
+
+    function buildAmapUrl(originText) {
+      const city = appState.settings.city || '重庆';
+      const cleanFrom = (originText || '').replace(/【[^】]+】/g, '').trim();
+      const from = `${city}${cleanFrom}`;
+      const to = `${city}${appState.settings.destination || '解放碑CBD'}`;
+      return `https://uri.amap.com/navigation?from=,,${encodeURIComponent(from)}&to=,,${encodeURIComponent(to)}&mode=bus&policy=1&src=rent_tool&callnative=1`;
+    }
+
+    function openAmapFromEditor() {
+      const origin = document.getElementById('f-community').value.trim()
+        || document.getElementById('f-title').value.trim()
+        || document.getElementById('f-district').value.trim();
+      if (!origin) {
+        showToast('请先输入小区位置或房源标题再查询路线');
+        return;
+      }
+      window.open(buildAmapUrl(origin), '_blank', 'noopener,noreferrer');
+    }
+
+    // ==================== 视图切换 ====================
+    function switchView(viewName) {
+      appState.activeView = viewName;
+      ['listings', 'editor', 'compare', 'backup'].forEach(v => {
+        document.getElementById(`view-${v}`).classList.toggle('hidden', v !== viewName);
+      });
+
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        const active = btn.dataset.navView === viewName;
+        btn.className = active
+          ? 'nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink font-bold'
+          : 'nav-tab btn-tactile flex flex-col items-center justify-center gap-1 py-1 rounded-xl text-ink-muted font-medium';
+      });
+
+      if (viewName === 'listings') renderListingsView();
+      if (viewName === 'compare') renderCompareView();
+      if (viewName === 'backup') updateStorageMonitor();
+      if (viewName === 'editor') updateLiveFormCost();
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ==================== 视图 1：房源清单 ====================
+    function setStatusFilter(filterKey) {
+      appState.statusFilter = filterKey;
+      renderListingsView();
+    }
+
+    function toggleDreamStatus(id) {
+      const item = appState.listings.find(l => l.id === id);
+      if (!item) return;
+      item.isDream = !item.isDream;
+      saveAppState();
+      renderListingsView();
+      showToast(item.isDream ? `已收藏「${item.title}」为梦中情房` : `已取消「${item.title}」的梦中情房标记`);
+    }
+
+    function toggleCompareSelect(id) {
+      const idx = appState.selectedIds.indexOf(id);
+      if (idx > -1) {
+        appState.selectedIds.splice(idx, 1);
+      } else {
+        if (appState.selectedIds.length >= 4) {
+          showToast('并排对比最多同时选 4 套房源，请先移出 1 套');
+          return;
+        }
+        appState.selectedIds.push(id);
+      }
+      saveAppState();
+      renderListingsView();
+    }
+
+    function renderSourceLinkButton(item) {
+      const type = detectLinkType(item.sourceLink);
+      if (type === 'miniprogram') {
+        return `
+          <button type="button" onclick="copyMiniProgramLink('${item.id}')" class="btn-tactile inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-hairline hover:bg-zinc-50 text-ink font-semibold">
+            <svg class="w-3.5 h-3.5 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/>
+            </svg>
+            <span>复制小程序口令</span>
+          </button>
+        `;
+      }
+      if (type === 'web') {
+        return `
+          <a href="${escapeAttr(item.sourceLink)}" target="_blank" rel="noopener noreferrer" class="btn-tactile inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-hairline hover:bg-zinc-50 text-ink font-semibold">
+            <svg class="w-3.5 h-3.5 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+            </svg>
+            <span>查看原房源</span>
+          </a>
+        `;
+      }
+      return '';
+    }
+
+    function renderListingsView() {
+      const totalCount = appState.listings.length;
+      const dreamCount = appState.listings.filter(l => l.isDream).length;
+      const todoCount = appState.listings.filter(l => l.status === '待看').length;
+      const doneCount = appState.listings.filter(l => l.status === '已看').length;
+      const elimCount = appState.listings.filter(l => l.status === '已淘汰').length;
+
+      const pillsConfig = [
+        { key: 'ALL', label: '全部', count: totalCount, isDreamPill: false },
+        { key: 'DREAM', label: '梦中情房', count: dreamCount, isDreamPill: true },
+        { key: '待看', label: '待看', count: todoCount, isDreamPill: false },
+        { key: '已看', label: '已看', count: doneCount, isDreamPill: false },
+        { key: '已淘汰', label: '已淘汰', count: elimCount, isDreamPill: false }
+      ];
+
+      document.getElementById('status-pills-row').innerHTML = pillsConfig.map(p => {
+        const isActive = appState.statusFilter === p.key;
+        let cls = 'btn-tactile inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border ';
+        if (p.isDreamPill) {
+          cls += isActive
+            ? 'bg-dream text-white border-dream'
+            : 'bg-rose-50 text-dream border-rose-200 hover:bg-rose-100/70';
+        } else {
+          cls += isActive
+            ? 'bg-zinc-900 text-white border-zinc-900'
+            : 'bg-transparent text-ink-secondary border-transparent hover:bg-zinc-100';
+        }
+
+        const heartSvg = p.isDreamPill
+          ? `<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg>`
+          : '';
+
+        return `
+          <button type="button" onclick="setStatusFilter('${p.key}')" class="${cls}">
+            ${heartSvg}
+            <span>${p.label}</span>
+            <span class="tabular-nums text-[11px] opacity-80">${p.count}</span>
+          </button>
+        `;
+      }).join('');
+
+      let items = appState.listings.map(item => ({ item, m: calcListingMetrics(item) }));
+      if (appState.statusFilter === 'DREAM') {
+        items = items.filter(x => x.item.isDream);
+      } else if (appState.statusFilter !== 'ALL') {
+        items = items.filter(x => x.item.status === appState.statusFilter);
+      }
+
+      items.sort((a, b) => {
+        switch (appState.sortBy) {
+          case 'cashCostAsc': return a.m.pureCashMonthly - b.m.pureCashMonthly;
+          case 'commuteAsc': return a.m.commuteMins - b.m.commuteMins;
+          case 'scoreDesc': return (Number(b.item.score) || 0) - (Number(a.item.score) || 0);
+          case 'trueCostAsc':
+          default:
+            return a.m.trueMonthlyCost - b.m.trueMonthlyCost;
+        }
+      });
+
+      const grid = document.getElementById('listings-grid');
+      if (items.length === 0) {
+        const isDreamEmpty = appState.statusFilter === 'DREAM';
+        grid.innerHTML = `
+          <div class="col-span-full bg-white rounded-2xl p-9 text-center border border-hairline shadow-card space-y-2.5">
+            <div class="w-10 h-10 rounded-xl ${isDreamEmpty ? 'bg-rose-50 text-dream' : 'bg-zinc-100 text-ink-secondary'} mx-auto flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
+              </svg>
+            </div>
+            <h3 class="text-sm font-bold text-ink">${isDreamEmpty ? '暂未收藏任何「梦中情房」' : '当前筛选条件下暂无房源'}</h3>
+            <p class="text-xs text-ink-muted">${isDreamEmpty ? '点击任意房源卡片右上角的红心按钮即可加入梦中情房' : '点击「+ 录入」粘贴分享文案、小程序口令或手动录入'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = items.map(({ item, m }) => {
+        const isChecked = appState.selectedIds.includes(item.id);
+        const photos = item.photos || [];
+        const flawCount = (item.flaws || []).length;
+        const amapUrl = buildAmapUrl(item.community || item.title || item.district);
+        const linkBtnHtml = renderSourceLinkButton(item);
+
+        return `
+          <article class="bg-white rounded-2xl border ${isChecked ? 'border-zinc-900 ring-1 ring-zinc-900' : 'border-hairline'} shadow-card overflow-hidden flex flex-col justify-between transition ${item.status === '已淘汰' ? 'opacity-65' : ''}">
+            <div>
+              ${photos.length > 0 ? `
+                <div class="relative h-36 bg-zinc-100 border-b border-hairline overflow-hidden cursor-pointer group" onclick="openLightboxForListing('${item.id}', 0)">
+                  <img src="${photos[0].dataUrl}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+                  <div class="absolute inset-x-0 bottom-0 px-3.5 py-2.5 bg-gradient-to-t from-zinc-950/75 to-transparent flex items-center justify-between gap-2 text-white text-xs">
+                    <span class="font-medium truncate">${escapeHtml(photos[0].caption || '室内实拍')}</span>
+                    <span class="tabular-nums px-2 py-0.5 rounded-md bg-zinc-950/65 backdrop-blur-xs text-[11px] font-semibold inline-flex items-center gap-1 shrink-0">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Z"/>
+                      </svg>
+                      <span>${photos.length}</span>
+                    </span>
+                  </div>
+                </div>
+              ` : ''}
+
+              <div class="p-4 space-y-3">
+                <!-- 标签行 + 右上角红心收藏与对比勾选 -->
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-semibold border ${item.status === '已看' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-alabaster text-ink-secondary border-hairline'}">${escapeHtml(item.status)}</span>
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-alabaster text-ink-secondary border border-hairline">${escapeHtml(item.style || '现代简约')}</span>
+                    ${flawCount > 0 ? `<span class="tabular-nums px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">${flawCount} 项瑕疵</span>` : ''}
+                  </div>
+
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="toggleDreamStatus('${item.id}')" aria-label="收藏为梦中情房" title="${item.isDream ? '取消梦中情房' : '收藏为梦中情房'}" class="btn-tactile p-1.5 rounded-xl border ${item.isDream ? 'bg-rose-50 text-dream border-rose-200' : 'bg-white text-ink-muted border-hairline hover:text-dream hover:border-rose-200'}">
+                      <svg class="w-4 h-4" fill="${item.isDream ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
+                      </svg>
+                    </button>
+                    <button type="button" onclick="toggleCompareSelect('${item.id}')" class="btn-tactile inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${isChecked ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-ink border-hairline hover:bg-zinc-50'}">
+                      ${isChecked
+                        ? `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg><span>已选</span>`
+                        : `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg><span>对比</span>`}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 标题与规格 -->
+                <div>
+                  <h3 class="text-sm sm:text-base font-bold text-ink leading-snug">${escapeHtml(item.title)}</h3>
+                  <p class="tabular-nums text-xs text-ink-muted mt-0.5">${escapeHtml(item.district || '重庆')}${item.community ? ' · ' + escapeHtml(item.community) : ''} · ${item.area}㎡ · ${escapeHtml(item.layout)} · ${escapeHtml(item.floorInfo)} · ${escapeHtml(item.orientation)}</p>
+                </div>
+
+                <!-- 3列核心指标 -->
+                <div class="tabular-nums grid grid-cols-3 gap-2 bg-alabaster rounded-xl p-3 border border-hairline">
+                  <div>
+                    <div class="text-[11px] text-ink-muted">真实月总成本</div>
+                    <div class="text-base font-bold text-ink mt-0.5">¥${Math.round(m.trueMonthlyCost)}</div>
+                    <div class="text-[11px] text-ink-muted">¥${m.pricePerSqm.toFixed(1)}/㎡</div>
+                  </div>
+                  <div>
+                    <div class="text-[11px] text-ink-muted">纯现金月支出</div>
+                    <div class="text-sm font-bold text-ink mt-0.5">¥${Math.round(m.pureCashMonthly)}</div>
+                    <div class="text-[11px] text-ink-muted">挂牌 ¥${m.rent}</div>
+                  </div>
+                  <div>
+                    <div class="text-[11px] text-ink-muted">单程 / 体验分</div>
+                    <div class="text-sm font-bold text-ink mt-0.5">${m.commuteMins}分 · ${Number(item.score).toFixed(1)}</div>
+                    <div class="text-[11px] text-ink-muted">${escapeHtml(item.utilityType)}</div>
+                  </div>
+                </div>
+
+                <!-- 亮点与瑕疵标签 -->
+                <div class="flex flex-wrap gap-1.5">
+                  ${(item.highlights || []).map(h => `<span class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-zinc-100 text-ink-secondary">${escapeHtml(h)}</span>`).join('')}
+                  ${(item.flaws || []).map(fl => `<span class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-600 border border-rose-200">${escapeHtml(fl)}</span>`).join('')}
+                </div>
+              </div>
+            </div>
+
+            <!-- 底部操作栏 -->
+            <div class="px-4 py-2.5 bg-alabaster border-t border-hairline flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <a href="${amapUrl}" target="_blank" rel="noopener noreferrer" class="btn-tactile inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-hairline hover:bg-zinc-50 text-ink font-semibold">
+                  <svg class="w-3.5 h-3.5 text-ink-secondary" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+                  </svg>
+                  <span>高德查通勤</span>
+                </a>
+                ${linkBtnHtml}
+              </div>
+
+              <div class="flex items-center gap-1.5 ml-auto">
+                <button type="button" onclick="openEditListingForm('${item.id}')" class="btn-tactile px-2.5 py-1.5 rounded-lg bg-white border border-hairline hover:bg-zinc-50 text-ink font-semibold">编辑</button>
+                <button type="button" onclick="confirmDeleteListing('${item.id}')" class="btn-tactile px-2 py-1.5 rounded-lg text-ink-muted hover:text-rose-600 hover:bg-rose-50 font-medium">删除</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function confirmDeleteListing(id) {
+      const item = appState.listings.find(l => l.id === id);
+      if (!item) return;
+      openConfirmModal(
+        '删除房源记录',
+        `确定要删除「${item.title}」及其所有实拍照片吗？`,
+        () => {
+          appState.listings = appState.listings.filter(l => l.id !== id);
+          appState.selectedIds = appState.selectedIds.filter(sid => sid !== id);
+          saveAppState();
+          renderListingsView();
+          showToast('已删除该房源记录');
+        }
+      );
+    }
+
+    function handleSampleToggle() {
+      const hasSamples = appState.listings.some(l => l.isSample);
+      if (hasSamples) {
+        openConfirmModal(
+          '清空示例房源',
+          '将移除预置的 3 套重庆靠江示例房源，保留你自己录入的数据。',
+          () => {
+            appState.listings = appState.listings.filter(l => !l.isSample);
+            appState.selectedIds = appState.selectedIds.filter(id => appState.listings.some(l => l.id === id));
+            saveAppState();
+            renderListingsView();
+            showToast('已清空示例房源');
+          }
+        );
+      } else {
+        const samples = getChongqingSampleListings();
+        const exist = new Set(appState.listings.map(l => l.id));
+        samples.forEach(s => { if (!exist.has(s.id)) appState.listings.push(s); });
+        if (appState.selectedIds.length === 0) appState.selectedIds = samples.map(s => s.id);
+        saveAppState();
+        renderListingsView();
+        showToast('已恢复 3 套重庆靠江示例房源');
+      }
+    }
+
+    // ==================== 视图 2：智能解析 & 表单录入 ====================
+    function renderStylePresets() {
+      document.getElementById('style-presets-row').innerHTML = STYLE_PRESETS.map(st => `
+        <button type="button" onclick="document.getElementById('f-style').value='${st}'" class="btn-tactile px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-ink-secondary text-[11px] font-medium">${st}</button>
+      `).join('');
+    }
+
+    function syncFormDreamIcon() {
+      const checked = document.getElementById('f-isDream').checked;
+      const svg = document.getElementById('f-dream-icon');
+      svg.setAttribute('fill', checked ? 'currentColor' : 'none');
+    }
+
+    function renderEditorFlaws() {
+      const box = document.getElementById('editor-flaws-list');
+      if (editorDraftFlaws.length === 0) {
+        box.innerHTML = `<span class="text-xs text-ink-muted">暂未记录明显瑕疵</span>`;
+        return;
+      }
+      box.innerHTML = editorDraftFlaws.map((fl, idx) => `
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium">
+          <span>${escapeHtml(fl)}</span>
+          <button type="button" onclick="editorDraftFlaws.splice(${idx}, 1); renderEditorFlaws();" aria-label="删除瑕疵" class="hover:text-rose-900">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+          </button>
+        </span>
+      `).join('');
+    }
+
+    function addDraftFlaw() {
+      const inp = document.getElementById('f-new-flaw-input');
+      const val = inp.value.trim();
+      if (!val) return;
+      if (!editorDraftFlaws.includes(val)) {
+        editorDraftFlaws.push(val);
+        renderEditorFlaws();
+      }
+      inp.value = '';
+    }
+
+    function toggleSmartParserBox() {
+      appState.parserExpanded = !appState.parserExpanded;
+      document.getElementById('smart-parser-body').classList.toggle('hidden', !appState.parserExpanded);
+      document.getElementById('parser-chevron').classList.toggle('rotate-180', !appState.parserExpanded);
+    }
+
+    function clearSmartParser() {
+      document.getElementById('smart-share-input').value = '';
+      const notice = document.getElementById('smart-parse-notice');
+      notice.classList.add('hidden');
+      notice.textContent = '';
+    }
+
+    function fillDemoMiniProgramOnly() {
+      document.getElementById('smart-share-input').value = '#小程序://贝壳丨二手房新房租房装修/tV3PZ3AUkgBSSKJ';
+    }
+
+    function fillDemoOcrAndMiniProgram() {
+      document.getElementById('smart-share-input').value =
+        '整租·南滨路海棠晓月一线江景 1室1厅 52㎡ 朝南看江 电梯16/28层 原木奶油风精装修，月租2800元/月，押一付一，民水民电，近地铁口 #小程序://贝壳丨二手房新房租房装修/tV3PZ3AUkgBSSKJ';
+    }
+
+    async function pasteFromClipboard() {
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text) {
+            document.getElementById('smart-share-input').value = text;
+            showToast('已粘贴剪贴板内容，点击「智能提取并填表」即可识别');
+            return;
+          }
+        }
+      } catch (err) {
+        // 剪贴板读取受限时提示手动粘贴
+      }
+      document.getElementById('smart-share-input').focus();
+      showToast('请长按上方输入框粘贴，再点击「智能提取并填表」');
+    }
+
+    function showSmartParseNotice(msg, tone = 'info') {
+      const el = document.getElementById('smart-parse-notice');
+      el.classList.remove('hidden', 'bg-amber-50', 'text-amber-900', 'border-amber-200', 'bg-emerald-50', 'text-emerald-800', 'border-emerald-200', 'bg-zinc-100', 'text-ink-secondary', 'border-hairline');
+      el.classList.add('border');
+      if (tone === 'amber') el.classList.add('bg-amber-50', 'text-amber-900', 'border-amber-200');
+      else if (tone === 'emerald') el.classList.add('bg-emerald-50', 'text-emerald-800', 'border-emerald-200');
+      else el.classList.add('bg-zinc-100', 'text-ink-secondary', 'border-hairline');
+      el.textContent = msg;
+    }
+
+    function updateLinkTypeBadge() {
+      const val = document.getElementById('f-sourceLink').value.trim();
+      const badge = document.getElementById('f-linkType-badge');
+      const type = detectLinkType(val);
+      badge.classList.remove('hidden', 'bg-emerald-50', 'text-emerald-700', 'bg-zinc-100', 'text-ink-secondary');
+      if (type === 'miniprogram') {
+        badge.textContent = '微信小程序口令';
+        badge.classList.add('bg-emerald-50', 'text-emerald-700');
+      } else if (type === 'web') {
+        badge.textContent = '网页链接';
+        badge.classList.add('bg-zinc-100', 'text-ink-secondary');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function extractFromSharedText() {
+      const raw = document.getElementById('smart-share-input').value.trim();
+      if (!raw) {
+        showToast('请先粘贴房源分享文案、截屏文字或微信小程序口令');
+        return;
+      }
+
+      const extracted = [];
+      const mpMatch = raw.match(/#小程序:\/\/[^\s"'<>\]）)】]+/);
+      const urlMatch = raw.match(/https?:\/\/[^\s"'<>\]）)】]+/i);
+
+      if (mpMatch) {
+        document.getElementById('f-sourceLink').value = mpMatch[0];
+        extracted.push('微信小程序口令');
+      } else if (urlMatch) {
+        document.getElementById('f-sourceLink').value = urlMatch[0];
+        extracted.push('原房源链接');
+      }
+      updateLinkTypeBadge();
+
+      const textBody = raw
+        .replace(/#小程序:\/\/[^\s"'<>\]）)】]+/g, '')
+        .replace(/https?:\/\/[^\s"'<>\]）)】]+/gi, '')
+        .trim();
+
+      // 纯小程序口令场景
+      if (mpMatch && textBody.length < 3) {
+        const msg = '已保存微信小程序口令，因微信加密限制未含房源文字，可配合手机截图提取文字补充或手动填写';
+        showSmartParseNotice(msg, 'amber');
+        showToast(msg);
+        return;
+      }
+
+      // 租金提取
+      let rentVal = null;
+      const yuanMatch = textBody.match(/(?:月租|租金|价格|房租)[：:\s¥￥]*(\d{3,5})|[¥￥]\s*(\d{3,5})|(\d{3,5})\s*(?:元\/月|元|块\/月|\/月)/);
+      const kMatch = textBody.match(/(\d+(?:\.\d+)?)\s*[kK千](?:\/月|元)?/);
+      if (yuanMatch) rentVal = Number(yuanMatch[1] || yuanMatch[2] || yuanMatch[3]);
+      else if (kMatch) rentVal = Math.round(Number(kMatch[1]) * 1000);
+      if (rentVal && rentVal >= 400 && rentVal <= 50000) {
+        document.getElementById('f-rent').value = rentVal;
+        extracted.push(`月租 ¥${rentVal}`);
+      }
+
+      // 面积提取
+      const areaMatch = textBody.match(/(\d{1,3}(?:\.\d+)?)\s*(?:㎡|平|平米|平方)/);
+      if (areaMatch) {
+        document.getElementById('f-area').value = areaMatch[1];
+        extracted.push(`${areaMatch[1]}㎡`);
+      }
+
+      // 户型提取
+      const layoutMatch = textBody.match(/(\d室\d厅\d卫|\d室\d厅|[一二三四]室[一二]厅|单间配套|一居室|两室一厅|大开间)/);
+      if (layoutMatch) {
+        document.getElementById('f-layout').value = layoutMatch[1];
+        extracted.push(layoutMatch[1]);
+      }
+
+      // 楼层提取
+      const floorNumMatch = textBody.match(/(?:电梯|步梯)?\s*(\d{1,2}\/\d{1,2}层|\d{1,2}楼|\d{1,2}层)/);
+      const floorLvlMatch = textBody.match(/(高楼层|中楼层|低楼层|顶楼)/);
+      const hasElev = textBody.includes('电梯');
+      const noElev = textBody.includes('步梯') || textBody.includes('无电梯');
+      if (floorNumMatch || floorLvlMatch) {
+        const core = floorNumMatch ? floorNumMatch[1] : floorLvlMatch[1];
+        const prefix = noElev ? '步梯 ' : (hasElev ? '电梯 ' : '');
+        document.getElementById('f-floorInfo').value = `${prefix}${core}`.trim();
+        extracted.push(`${prefix}${core}`.trim());
+      }
+
+      // 朝向与江景
+      const orientArr = [];
+      const dirMatch = textBody.match(/(南北通透|朝南|朝东|朝西|朝北|东南|西南)/);
+      if (dirMatch) orientArr.push(dirMatch[1]);
+      if (textBody.includes('一线江景') || textBody.includes('一线看江')) orientArr.push('一线江景');
+      else if (textBody.includes('看江') || textBody.includes('江景')) orientArr.push('看江视野');
+      if (orientArr.length > 0) {
+        document.getElementById('f-orientation').value = orientArr.join(' · ');
+        extracted.push(orientArr.join(' · '));
+      }
+
+      // 水电与押付
+      if (textBody.includes('商水') || textBody.includes('商电') || textBody.includes('商业水电')) {
+        document.getElementById('f-utilityType').value = '商水商电';
+        extracted.push('商水商电');
+      } else if (textBody.includes('民水') || textBody.includes('民电') || textBody.includes('居民水电')) {
+        document.getElementById('f-utilityType').value = '民水民电';
+        extracted.push('民水民电');
+      }
+
+      for (const term of ['押一付一', '押一付三', '押二付一', '半年付', '年付']) {
+        if (textBody.includes(term)) {
+          document.getElementById('f-paymentTerm').value = term;
+          extracted.push(term);
+          break;
+        }
+      }
+
+      // 装修风格关键词
+      if (textBody.includes('原木') || textBody.includes('奶油')) document.getElementById('f-style').value = '原木奶油风';
+      else if (textBody.includes('公寓')) document.getElementById('f-style').value = '精装公寓';
+      else if (textBody.includes('老破小')) document.getElementById('f-style').value = '老破小简装';
+      else if (textBody.includes('精装')) document.getElementById('f-style').value = '现代简约';
+
+      // 靠江/地铁亮点
+      const autoHighlights = [];
+      if (textBody.includes('靠江') || textBody.includes('江景') || textBody.includes('看江') || textBody.includes('滨江')) autoHighlights.push('靠江/江景');
+      if (textBody.includes('地铁') || textBody.includes('轻轨')) autoHighlights.push('近地铁口');
+      if (textBody.includes('精装')) autoHighlights.push('精装修');
+      if (textBody.includes('阳台')) autoHighlights.push('带阳台');
+      if (textBody.includes('房东直租') || textBody.includes('无中介')) {
+        autoHighlights.push('房东直租无中介');
+        document.getElementById('f-oneTimeCost').value = 300;
+      }
+
+      if (autoHighlights.length > 0) {
+        const cur = document.getElementById('f-highlights').value.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+        document.getElementById('f-highlights').value = Array.from(new Set([...cur, ...autoHighlights])).join(', ');
+      }
+
+      // 标题与区域
+      const cleanStr = textBody.replace(/【[^】]+】/g, '').replace(/^整租[·\s:]*/g, '').trim();
+      const firstLine = cleanStr.split(/[\n，,。!！]/)[0].trim();
+      if (firstLine && !document.getElementById('f-title').value.trim()) {
+        document.getElementById('f-title').value = firstLine.slice(0, 28);
+        extracted.push('标题');
+      }
+      const distMatch = cleanStr.match(/([\u4e00-\u9fa5]{2,6}(?:路|街|大道|半岛|湾|站))/);
+      if (distMatch && !document.getElementById('f-district').value.trim()) {
+        document.getElementById('f-district').value = distMatch[1];
+      }
+
+      updateLiveFormCost();
+      if (extracted.length > 0) {
+        showSmartParseNotice(`提取完成：已自动填充 ${extracted.join('、')}，请核对下方表单后保存。`, 'emerald');
+        showToast(`成功提取 ${extracted.length} 项字段`);
+      } else {
+        showSmartParseNotice('未检测到标准租金/面积或链接格式，请补充详情文字或手动填写。', 'info');
+      }
+    }
+
+    function openNewListingForm() {
+      resetListingForm();
+      switchView('editor');
+    }
+
+    function resetListingForm() {
+      document.getElementById('f-id').value = '';
+      document.getElementById('editor-heading').textContent = '录入新房源';
+      clearSmartParser();
+      document.getElementById('f-isDream').checked = false;
+      syncFormDreamIcon();
+      document.getElementById('f-title').value = '';
+      document.getElementById('f-community').value = '';
+      document.getElementById('f-district').value = '';
+      document.getElementById('f-status').value = '待看';
+      document.getElementById('f-sourceLink').value = '';
+      updateLinkTypeBadge();
+      document.getElementById('f-rent').value = '';
+      document.getElementById('f-paymentTerm').value = '押一付三';
+      document.getElementById('f-utilityType').value = '民水民电';
+      document.getElementById('f-fixedMisc').value = 150;
+      document.getElementById('f-oneTimeCost').value = 1300;
+      document.getElementById('f-singleFare').value = 3;
+      document.getElementById('f-area').value = '';
+      document.getElementById('f-layout').value = '1室1厅';
+      document.getElementById('f-floorInfo').value = '电梯中高区';
+      document.getElementById('f-orientation').value = '朝南看江';
+      document.getElementById('f-commuteMinutes').value = 25;
+      document.getElementById('f-style').value = '现代简约';
+      document.getElementById('f-score').value = 8.5;
+      document.getElementById('f-score-val').textContent = '8.5 分';
+      document.getElementById('f-highlights').value = '';
+      document.getElementById('f-new-flaw-input').value = '';
+      editorDraftFlaws = [];
+      editorDraftPhotos = [];
+      renderEditorFlaws();
+      renderEditorPhotos();
+      updateLiveFormCost();
+    }
+
+    function openEditListingForm(id) {
+      const item = appState.listings.find(l => l.id === id);
+      if (!item) return;
+
+      document.getElementById('f-id').value = item.id;
+      document.getElementById('editor-heading').textContent = `编辑房源 · ${item.title}`;
+      clearSmartParser();
+      document.getElementById('f-isDream').checked = Boolean(item.isDream);
+      syncFormDreamIcon();
+      document.getElementById('f-title').value = item.title;
+      document.getElementById('f-community').value = item.community || '';
+      document.getElementById('f-district').value = item.district || '';
+      document.getElementById('f-status').value = item.status || '待看';
+      document.getElementById('f-sourceLink').value = item.sourceLink || '';
+      updateLinkTypeBadge();
+      document.getElementById('f-rent').value = item.rent;
+      document.getElementById('f-paymentTerm').value = item.paymentTerm || '押一付三';
+      document.getElementById('f-utilityType').value = item.utilityType || '民水民电';
+      document.getElementById('f-fixedMisc').value = item.fixedMonthlyMisc ?? 0;
+      document.getElementById('f-oneTimeCost').value = item.oneTimeCost ?? 0;
+      document.getElementById('f-singleFare').value = item.singleFare ?? 3;
+      document.getElementById('f-area').value = item.area;
+      document.getElementById('f-layout').value = item.layout || '1室1厅';
+      document.getElementById('f-floorInfo').value = item.floorInfo || '';
+      document.getElementById('f-orientation').value = item.orientation || '';
+      document.getElementById('f-commuteMinutes').value = item.commuteMinutes ?? 25;
+      document.getElementById('f-style').value = item.style || '现代简约';
+      document.getElementById('f-score').value = item.score ?? 8.5;
+      document.getElementById('f-score-val').textContent = `${Number(item.score ?? 8.5).toFixed(1)} 分`;
+      document.getElementById('f-highlights').value = (item.highlights || []).join(', ');
+      document.getElementById('f-new-flaw-input').value = '';
+
+      editorDraftFlaws = [...(item.flaws || [])];
+      editorDraftPhotos = (item.photos || []).map(p => ({ ...p }));
+      renderEditorFlaws();
+      renderEditorPhotos();
+      switchView('editor');
+      updateLiveFormCost();
+    }
+
+    function updateLiveFormCost() {
+      const m = calcListingMetrics({
+        rent: document.getElementById('f-rent').value,
+        fixedMonthlyMisc: document.getElementById('f-fixedMisc').value,
+        singleFare: document.getElementById('f-singleFare').value,
+        oneTimeCost: document.getElementById('f-oneTimeCost').value,
+        area: document.getElementById('f-area').value || 45,
+        commuteMinutes: document.getElementById('f-commuteMinutes').value
+      });
+      document.getElementById('live-true-cost').textContent = `¥${Math.round(m.trueMonthlyCost)}/月`;
+      document.getElementById('live-cash-cost').textContent = `纯现金 ¥${Math.round(m.pureCashMonthly)}/月`;
+    }
+
+    function renderEditorPhotos() {
+      const grid = document.getElementById('editor-photos-grid');
+      if (editorDraftPhotos.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-6 text-center text-xs text-ink-muted border border-dashed border-hairline rounded-xl bg-alabaster">暂未上传实拍照片，点击右上角「相册选图」上传客厅采光、江景或局部瑕疵照片</div>`;
+        return;
+      }
+      grid.innerHTML = editorDraftPhotos.map((p, idx) => `
+        <div class="border border-hairline rounded-xl overflow-hidden bg-white">
+          <div class="relative h-24 bg-zinc-100">
+            <img src="${p.dataUrl}" alt="实拍缩略图" class="w-full h-full object-cover" />
+            <button type="button" onclick="editorDraftPhotos.splice(${idx}, 1); renderEditorPhotos();" aria-label="删除照片" class="btn-tactile absolute top-1.5 right-1.5 w-6 h-6 rounded-lg bg-zinc-900/80 hover:bg-rose-600 text-white flex items-center justify-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <input type="text" value="${escapeAttr(p.caption || '')}" oninput="editorDraftPhotos[${idx}].caption=this.value" placeholder="备注(如:客厅采光/卫生间瑕疵)" class="w-full px-2.5 py-1.5 text-[11px] text-ink border-t border-hairline focus:outline-none focus:bg-alabaster" />
+        </div>
+      `).join('');
+    }
+
+    // 前端 Canvas 自动压缩至最大宽度 800px，JPEG quality 0.72
+    function handleEditorPhotoUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0) return;
+
+      let count = 0;
+      files.forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            const MAX_W = 800;
+            let w = img.width;
+            let h = img.height;
+            if (w > MAX_W) {
+              h = Math.round((h * MAX_W) / w);
+              w = MAX_W;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+            editorDraftPhotos.push({
+              dataUrl,
+              caption: file.name.replace(/\.[^/.]+$/, '').slice(0, 16) || '房间实拍'
+            });
+            count++;
+            if (count === files.length) {
+              renderEditorPhotos();
+              showToast(`已自动压缩并添加 ${count} 张实拍图`);
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      event.target.value = '';
+    }
+
+    function saveListingForm(e) {
+      e.preventDefault();
+      // 若瑕疵输入框里还有未点添加的文字，自动补入列表
+      const pendingFlaw = document.getElementById('f-new-flaw-input').value.trim();
+      if (pendingFlaw && !editorDraftFlaws.includes(pendingFlaw)) {
+        editorDraftFlaws.push(pendingFlaw);
+      }
+
+      const id = document.getElementById('f-id').value.trim();
+      const title = document.getElementById('f-title').value.trim();
+      const rent = Number(document.getElementById('f-rent').value);
+      const area = Number(document.getElementById('f-area').value);
+
+      if (!title || rent <= 0 || area <= 0) {
+        showToast('请完整填写房源标题、有效挂牌月租与建筑面积');
+        return;
+      }
+
+      const splitTags = str => str.split(/[,，、;；]/).map(s => s.trim()).filter(Boolean);
+
+      const record = {
+        id: id || `apt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        isSample: false,
+        isDream: document.getElementById('f-isDream').checked,
+        status: document.getElementById('f-status').value,
+        title,
+        community: document.getElementById('f-community').value.trim(),
+        district: document.getElementById('f-district').value.trim() || '重庆',
+        sourceLink: document.getElementById('f-sourceLink').value.trim(),
+        rent,
+        paymentTerm: document.getElementById('f-paymentTerm').value,
+        fixedMonthlyMisc: Number(document.getElementById('f-fixedMisc').value) || 0,
+        utilityType: document.getElementById('f-utilityType').value,
+        singleFare: Number(document.getElementById('f-singleFare').value) || 0,
+        oneTimeCost: Number(document.getElementById('f-oneTimeCost').value) || 0,
+        area,
+        layout: document.getElementById('f-layout').value.trim() || '1室1厅',
+        floorInfo: document.getElementById('f-floorInfo').value.trim() || '电梯中高区',
+        orientation: document.getElementById('f-orientation').value.trim() || '朝南',
+        commuteMinutes: Number(document.getElementById('f-commuteMinutes').value) || 0,
+        style: document.getElementById('f-style').value.trim() || '现代简约',
+        score: Number(document.getElementById('f-score').value) || 8.0,
+        highlights: splitTags(document.getElementById('f-highlights').value),
+        flaws: [...editorDraftFlaws],
+        photos: editorDraftPhotos.map(p => ({ ...p }))
+      };
+
+      if (id) {
+        const idx = appState.listings.findIndex(l => l.id === id);
+        if (idx > -1) appState.listings[idx] = record;
+        showToast(`已更新「${record.title}」`);
+      } else {
+        appState.listings.unshift(record);
+        if (appState.selectedIds.length < 3) {
+          appState.selectedIds.push(record.id);
+        }
+        showToast(`已保存「${record.title}」`);
+      }
+
+      saveAppState();
+      switchView('listings');
+    }
+
+    // ==================== 视图 3：决赛圈并排对比（2~4 套） ====================
+    function autoPickTop3() {
+      const valid = appState.listings
+        .filter(l => l.status !== '已淘汰')
+        .map(item => ({ item, m: calcListingMetrics(item) }));
+
+      if (valid.length === 0) {
+        showToast('暂无未淘汰的可用房源');
+        return;
+      }
+      valid.sort((a, b) => a.m.trueMonthlyCost - b.m.trueMonthlyCost);
+      appState.selectedIds = valid.slice(0, 3).map(x => x.item.id);
+      saveAppState();
+      renderCompareView();
+      showToast(`已自动选出真实月成本最低的前 ${appState.selectedIds.length} 套`);
+    }
+
+    function addCompareFromSelect(sel) {
+      const id = sel.value;
+      if (!id) return;
+      if (appState.selectedIds.length >= 4) {
+        showToast('并排对比最多同时选 4 套房源');
+        sel.value = '';
+        return;
+      }
+      if (!appState.selectedIds.includes(id)) {
+        appState.selectedIds.push(id);
+        saveAppState();
+        renderCompareView();
+      }
+      sel.value = '';
+    }
+
+    function removeCompareId(id) {
+      appState.selectedIds = appState.selectedIds.filter(sid => sid !== id);
+      saveAppState();
+      renderCompareView();
+    }
+
+    function renderCompareView() {
+      const selected = appState.selectedIds
+        .map(id => appState.listings.find(l => l.id === id))
+        .filter(Boolean)
+        .map(item => ({ item, m: calcListingMetrics(item) }));
+
+      document.getElementById('compare-selected-chips').innerHTML = selected.map((s, idx) => `
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-100 border border-hairline text-xs font-semibold text-ink">
+          <span class="tabular-nums text-ink-muted">#${idx + 1}</span>
+          <span class="max-w-[140px] truncate">${escapeHtml(s.item.title)}</span>
+          <button type="button" onclick="removeCompareId('${s.item.id}')" aria-label="移出对比" class="text-ink-secondary hover:text-ink flex items-center">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+          </button>
+        </span>
+      `).join('');
+
+      const addSel = document.getElementById('compare-add-dropdown');
+      const rest = appState.listings.filter(l => !appState.selectedIds.includes(l.id));
+      if (selected.length >= 4 || rest.length === 0) {
+        addSel.classList.add('hidden');
+      } else {
+        addSel.classList.remove('hidden');
+        addSel.innerHTML = `<option value="">+ 追加房源 (${selected.length}/4)...</option>` +
+          rest.map(l => `<option value="${l.id}">${escapeHtml(l.title)} (¥${l.rent})</option>`).join('');
+      }
+
+      const area = document.getElementById('compare-content-area');
+      if (selected.length < 2) {
+        area.innerHTML = `
+          <div class="bg-white rounded-2xl p-9 text-center border border-hairline shadow-card space-y-2">
+            <h3 class="text-sm font-bold text-ink">请至少选择 2 套房源进行并排对比</h3>
+            <p class="text-xs text-ink-muted">当前已选 ${selected.length} 套，点击上方「自动选最优前3套」或从下拉框追加</p>
+          </div>
+        `;
+        return;
+      }
+
+      const diffOnly = document.getElementById('chk-diff-only').checked;
+      const hideCommute = document.getElementById('chk-hide-commute').checked;
+
+      const rows = [
+        {
+          key: 'photos',
+          label: '实拍图对照',
+          alwaysShow: true,
+          render: s => {
+            const photos = s.item.photos || [];
+            if (photos.length === 0) {
+              return `<div class="h-20 rounded-xl bg-alabaster border border-dashed border-hairline flex items-center justify-center text-[11px] text-ink-muted">暂无实拍图</div>`;
+            }
+            return `
+              <div class="space-y-1.5">
+                <div class="grid grid-cols-2 gap-1.5">
+                  ${photos.slice(0, 2).map((p, idx) => `
+                    <div onclick="openLightboxForListing('${s.item.id}', ${idx})" class="h-16 rounded-lg overflow-hidden border border-hairline cursor-pointer bg-zinc-100">
+                      <img src="${p.dataUrl}" alt="实拍缩略图" class="w-full h-full object-cover" />
+                    </div>
+                  `).join('')}
+                </div>
+                <button type="button" onclick="openLightboxForListing('${s.item.id}', 0)" class="tabular-nums text-[11px] font-semibold text-ink underline underline-offset-2">
+                  全屏检视 (${photos.length}张)
+                </button>
+              </div>
+            `;
+          }
+        },
+        {
+          key: 'dream',
+          label: '梦中情房标记',
+          getRaw: s => String(Boolean(s.item.isDream)),
+          render: s => s.item.isDream
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-dream border border-rose-200 text-[11px] font-bold"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg><span>梦中情房</span></span>`
+            : `<span class="text-xs text-ink-muted">未标记</span>`
+        },
+        {
+          key: 'status',
+          label: '看房状态',
+          getRaw: s => s.item.status,
+          render: s => `<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold border ${s.item.status === '已看' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-alabaster text-ink-secondary border-hairline'}">${escapeHtml(s.item.status)}</span>`
+        },
+        {
+          key: 'trueMonthly',
+          label: hideCommute ? '纯现金月支出 (核心)' : '真实月总成本 (核心)',
+          better: 'min',
+          getNum: s => hideCommute ? s.m.pureCashMonthly : s.m.trueMonthlyCost,
+          render: s => {
+            const val = hideCommute ? s.m.pureCashMonthly : s.m.trueMonthlyCost;
+            return `<div class="tabular-nums text-base font-bold text-ink">¥${Math.round(val)}<span class="text-xs font-normal text-ink-muted">/月</span></div>`;
+          }
+        },
+        {
+          key: 'pureCash',
+          label: '纯现金月支出',
+          better: 'min',
+          getNum: s => s.m.pureCashMonthly,
+          render: s => `<div class="tabular-nums font-semibold text-ink">¥${Math.round(s.m.pureCashMonthly)}/月</div><div class="tabular-nums text-[11px] text-ink-muted">含杂费¥${s.m.fixedMisc}+交通¥${Math.round(s.m.monthlyTransit)}</div>`
+        },
+        {
+          key: 'rent',
+          label: '挂牌月租',
+          better: 'min',
+          getNum: s => s.m.rent,
+          render: s => `<div class="tabular-nums font-semibold text-ink">¥${s.m.rent}/月</div><div class="text-[11px] text-ink-muted">${escapeHtml(s.item.paymentTerm)}</div>`
+        },
+        {
+          key: 'unitPrice',
+          label: '每平米月成本',
+          better: 'min',
+          getNum: s => hideCommute ? s.m.cashPricePerSqm : s.m.pricePerSqm,
+          render: s => {
+            const u = hideCommute ? s.m.cashPricePerSqm : s.m.pricePerSqm;
+            return `<div class="tabular-nums font-semibold text-ink">¥${u.toFixed(1)}<span class="text-[11px] font-normal text-ink-muted">/㎡/月</span></div>`;
+          }
+        },
+        {
+          key: 'commute',
+          label: '单程通勤耗时',
+          better: 'min',
+          getNum: s => s.m.commuteMins,
+          render: s => `<div class="tabular-nums font-semibold text-ink">${s.m.commuteMins} 分钟</div>${!hideCommute ? `<div class="tabular-nums text-[11px] text-ink-muted">时间折现 ¥${Math.round(s.m.commuteDiscount)}/月</div>` : ''}`
+        },
+        {
+          key: 'utility',
+          label: '水电类型',
+          getRaw: s => s.item.utilityType,
+          render: s => `<span class="font-semibold text-ink">${escapeHtml(s.item.utilityType)}</span>`
+        },
+        {
+          key: 'style',
+          label: '装修风格',
+          getRaw: s => s.item.style,
+          render: s => `<span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium bg-alabaster border border-hairline text-ink-secondary">${escapeHtml(s.item.style)}</span>`
+        },
+        {
+          key: 'areaFloorOrient',
+          label: '面积与楼层朝向',
+          better: 'max',
+          getNum: s => Number(s.item.area) || 0,
+          render: s => `<div class="tabular-nums font-semibold text-ink">${s.item.area} ㎡ · ${escapeHtml(s.item.layout)}</div><div class="text-[11px] text-ink-muted">${escapeHtml(s.item.floorInfo)} · ${escapeHtml(s.item.orientation)}</div>`
+        },
+        {
+          key: 'score',
+          label: '体验评分',
+          better: 'max',
+          getNum: s => Number(s.item.score) || 0,
+          render: s => `<span class="tabular-nums text-sm font-bold text-ink">${Number(s.item.score).toFixed(1)} <span class="text-xs font-normal text-ink-muted">/ 10</span></span>`
+        },
+        {
+          key: 'flaws',
+          label: '明显瑕疵清单',
+          getRaw: s => (s.item.flaws || []).join(','),
+          render: s => (s.item.flaws && s.item.flaws.length)
+            ? `<div class="flex flex-wrap gap-1">${s.item.flaws.map(fl => `<span class="px-2 py-0.5 rounded-md text-[11px] bg-rose-50 text-rose-600 border border-rose-200">${escapeHtml(fl)}</span>`).join('')}</div>`
+            : `<span class="text-emerald-600 text-xs font-semibold">无明显瑕疵</span>`
+        },
+        {
+          key: 'actions',
+          label: '高德通勤与原房源',
+          alwaysShow: true,
+          render: s => `
+            <div class="flex flex-wrap gap-1.5">
+              <a href="${buildAmapUrl(s.item.community || s.item.title || s.item.district)}" target="_blank" rel="noopener noreferrer" class="btn-tactile inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-hairline hover:bg-zinc-50 text-ink text-xs font-semibold">高德查通勤</a>
+              ${renderSourceLinkButton(s.item)}
+            </div>
+          `
+        }
+      ];
+
+      const visibleRows = rows.filter(row => {
+        if (!diffOnly || row.alwaysShow) return true;
+        if (row.getNum) {
+          const vals = selected.map(s => Math.round(row.getNum(s) * 100));
+          return new Set(vals).size > 1;
+        }
+        if (row.getRaw) {
+          const vals = selected.map(s => row.getRaw(s));
+          return new Set(vals).size > 1;
+        }
+        return true;
+      });
+
+      const tableHtml = `
+        <div class="bg-white rounded-2xl border border-hairline shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr class="bg-alabaster border-b border-hairline">
+                  <th class="sticky-col bg-alabaster p-3.5 min-w-[114px] max-w-[138px] font-semibold text-ink-secondary shadow-sticky-right">对比维度</th>
+                  ${selected.map((s, idx) => `
+                    <th class="p-3.5 min-w-[178px] align-top border-l border-hairline">
+                      <div class="tabular-nums text-[10px] font-semibold text-ink-muted flex items-center gap-1">
+                        <span>候选 0${idx + 1} · ${escapeHtml(s.item.district)}</span>
+                        ${s.item.isDream ? `<svg class="w-3 h-3 text-dream shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-label="梦中情房"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg>` : ''}
+                      </div>
+                      <div class="text-xs sm:text-sm font-bold text-ink mt-0.5 leading-snug">${escapeHtml(s.item.title)}</div>
+                    </th>
+                  `).join('')}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-hairline">
+                ${visibleRows.map(row => {
+                  let bestV = null, worstV = null, hasSpread = false;
+                  if (row.better && row.getNum) {
+                    const nums = selected.map(s => row.getNum(s));
+                    const minV = Math.min(...nums);
+                    const maxV = Math.max(...nums);
+                    if (Math.abs(maxV - minV) > 0.01) {
+                      hasSpread = true;
+                      bestV = row.better === 'min' ? minV : maxV;
+                      worstV = row.better === 'min' ? maxV : minV;
+                    }
+                  }
+
+                  return `
+                    <tr>
+                      <td class="sticky-col bg-white p-3.5 min-w-[114px] max-w-[138px] font-semibold text-ink-secondary shadow-sticky-right align-middle">${row.label}</td>
+                      ${selected.map(s => {
+                        let cellBg = '';
+                        let badgeHtml = '';
+                        if (hasSpread && row.getNum) {
+                          const v = row.getNum(s);
+                          if (Math.abs(v - bestV) <= 0.01) {
+                            cellBg = 'bg-emerald-50/80';
+                            badgeHtml = `<div><span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">最优</span></div>`;
+                          } else if (Math.abs(v - worstV) <= 0.01) {
+                            cellBg = 'bg-rose-50/70';
+                            badgeHtml = `<div><span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">偏高</span></div>`;
+                          }
+                        }
+                        return `<td class="p-3.5 align-middle border-l border-hairline ${cellBg}">${row.render(s)}${badgeHtml}</td>`;
+                      }).join('')}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      area.innerHTML = tableHtml + buildDecisionAdvisorCard(selected, hideCommute);
+    }
+
+    function buildDecisionAdvisorCard(selected, hideCommute) {
+      const getVal = s => hideCommute ? s.m.pureCashMonthly : s.m.trueMonthlyCost;
+      const label = hideCommute ? '纯现金月支出' : '真实月总成本';
+      const ranked = selected.slice().sort((a, b) => getVal(a) - getVal(b));
+      const top1 = ranked[0];
+      const top2 = ranked[1];
+      const c1 = Math.round(getVal(top1));
+
+      let compareText = '';
+      if (top2) {
+        const c2 = Math.round(getVal(top2));
+        const saveM = c2 - c1;
+        const saveY = saveM * 12;
+        const scoreDiff = (Number(top1.item.score) - Number(top2.item.score)).toFixed(1);
+        const scoreDesc = Number(scoreDiff) >= 0
+          ? `体验分还高出 ${scoreDiff} 分`
+          : `体验分低 ${Math.abs(Number(scoreDiff)).toFixed(1)} 分`;
+
+        if (saveM > 0) {
+          compareText = `对比第二名「${escapeHtml(top2.item.title)}」（¥${c2}/月），每月可省 <strong class="tabular-nums text-emerald-600">¥${saveM}</strong>，一年累计省下 <strong class="tabular-nums text-emerald-600">¥${saveY}</strong>（${scoreDesc}）。`;
+        } else {
+          compareText = `与第二名「${escapeHtml(top2.item.title)}」月成本持平（¥${c1}/月，${scoreDesc}），建议结合梦中情房偏好与瑕疵数量拍板。`;
+        }
+      }
+
+      const dreamItems = selected.filter(s => s.item.isDream);
+      const flawCount = (top1.item.flaws || []).length;
+      const flawHint = flawCount > 0
+        ? `首选房源当前有 ${flawCount} 项瑕疵记录（${top1.item.flaws.map(f => escapeHtml(f)).join('、')}），签约前建议重点复核。`
+        : `首选房源目前无明显瑕疵记录，综合体验评分 ${Number(top1.item.score).toFixed(1)} / 10。`;
+
+      return `
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-hairline border-l-4 border-l-zinc-900 shadow-card space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-ink">决策参谋结论卡 · ${label}视角</span>
+            ${top1.item.isDream ? `<span class="inline-flex items-center gap-1 text-xs font-bold text-dream"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg><span>梦中情房</span></span>` : ''}
+          </div>
+          <p class="text-xs sm:text-sm leading-relaxed text-ink">
+            综合账单测算，<strong>「${escapeHtml(top1.item.title)}」</strong>的${label}最低，为 <strong class="tabular-nums text-base">¥${c1}/月</strong>。${compareText}
+          </p>
+          <p class="text-xs text-ink-secondary">${flawHint}</p>
+          ${dreamItems.length > 0 && !top1.item.isDream ? `
+            <p class="text-xs text-dream font-medium flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg>
+              <span>你的梦中情房「${escapeHtml(dreamItems[0].item.title)}」当前${label}为 ¥${Math.round(getVal(dreamItems[0]))}/月，比成本最低项多 ¥${Math.round(getVal(dreamItems[0]) - c1)}/月。</span>
+            </p>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // ==================== 视图 4：数据备份与恢复 ====================
+    function updateStorageMonitor() {
+      const raw = localStorage.getItem(STORAGE_KEY) || '';
+      const bytes = new Blob([raw]).size;
+      const kb = Math.round(bytes / 1024);
+      const mb = (bytes / (1024 * 1024)).toFixed(2);
+      const pct = Math.min(100, Math.max(2, Math.round((bytes / (5 * 1024 * 1024)) * 100)));
+
+      const label = document.getElementById('storage-usage-label');
+      const bar = document.getElementById('storage-usage-bar');
+      if (label) label.textContent = `${kb} KB (${mb} MB) / 5.00 MB (${pct}%)`;
+      if (bar) {
+        bar.style.width = `${pct}%`;
+        bar.className = pct > 80
+          ? 'h-full bg-rose-600 rounded-full transition-all duration-300'
+          : 'h-full bg-zinc-900 rounded-full transition-all duration-300';
+      }
+    }
+
+    function buildBackupObject() {
+      return {
+        appName: '5月整租对比工具',
+        version: '2.4',
+        exportedAt: new Date().toLocaleString('zh-CN'),
+        settings: appState.settings,
+        selectedIds: appState.selectedIds,
+        listings: appState.listings
+      };
+    }
+
+    function downloadBackupFile() {
+      try {
+        const jsonStr = JSON.stringify(buildBackupObject(), null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `5月整租对比备份_v2.4_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('已下载 .json 备份文件');
+      } catch (err) {
+        showToast('导出文件失败，请使用「一键复制 JSON 文本」');
+      }
+    }
+
+    function copyBackupText() {
+      const jsonStr = JSON.stringify(buildBackupObject(), null, 2);
+      copyTextSafely(jsonStr, '已复制 JSON 备份，可直接粘贴到微信收藏或手机备忘录');
+    }
+
+    function handleBackupFileSelect(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('backup-import-textarea').value = e.target.result || '';
+        showBackupStatus('已加载文件内容，确认恢复模式后点击「校验并执行恢复」', 'info');
+      };
+      reader.readAsText(file, 'utf-8');
+      event.target.value = '';
+    }
+
+    function showBackupStatus(msg, type) {
+      const banner = document.getElementById('backup-status-banner');
+      banner.classList.remove('hidden', 'bg-rose-50', 'text-rose-600', 'bg-emerald-50', 'text-emerald-700', 'bg-zinc-100', 'text-ink-secondary');
+      if (type === 'error') banner.classList.add('bg-rose-50', 'text-rose-600');
+      else if (type === 'success') banner.classList.add('bg-emerald-50', 'text-emerald-700');
+      else banner.classList.add('bg-zinc-100', 'text-ink-secondary');
+      banner.textContent = msg;
+    }
+
+    function restoreFromTextarea() {
+      const raw = document.getElementById('backup-import-textarea').value.trim();
+      if (!raw) {
+        showBackupStatus('请先粘贴 JSON 备份文本或选择本地 .json 文件', 'error');
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        showBackupStatus(`JSON 格式校验失败：${err.message}`, 'error');
+        return;
+      }
+
+      const incoming = Array.isArray(parsed.listings) ? parsed.listings : (Array.isArray(parsed.apartments) ? parsed.apartments : null);
+      if (!incoming || incoming.length === 0) {
+        showBackupStatus('数据结构校验失败：未在备份中找到有效房源列表', 'error');
+        return;
+      }
+
+      const normalized = incoming.filter(x => x && (x.title || x.name)).map(x => ({
+        id: x.id || `imp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        isSample: Boolean(x.isSample),
+        isDream: Boolean(x.isDream),
+        status: ['待看', '已看', '已淘汰'].includes(x.status) ? x.status : '待看',
+        title: String(x.title || x.name),
+        community: String(x.community || ''),
+        district: String(x.district || '重庆'),
+        sourceLink: String(x.sourceLink || x.sourceUrl || ''),
+        rent: Number(x.rent) || 0,
+        paymentTerm: String(x.paymentTerm || x.depositType || '押一付三'),
+        fixedMonthlyMisc: Number(x.fixedMonthlyMisc ?? x.propertyFee) || 0,
+        singleFare: Number(x.singleFare) || 3,
+        oneTimeCost: Number(x.oneTimeCost) || 0,
+        area: Number(x.area) || 45,
+        layout: String(x.layout || '1室1厅'),
+        floorInfo: String(x.floorInfo || x.floor || ''),
+        orientation: String(x.orientation || x.lighting || ''),
+        commuteMinutes: Number(x.commuteMinutes ?? x.commuteMins) || 25,
+        utilityType: x.utilityType === '商水商电' ? '商水商电' : '民水民电',
+        score: Number(x.score) || 8.0,
+        style: String(x.style || '现代简约'),
+        highlights: Array.isArray(x.highlights) ? x.highlights : [],
+        flaws: Array.isArray(x.flaws) ? x.flaws : [],
+        photos: Array.isArray(x.photos) ? x.photos.map(p => ({ dataUrl: p.dataUrl || p.url, caption: p.caption || '' })) : []
+      }));
+
+      const mode = document.querySelector('input[name="restore-mode"]:checked')?.value || 'merge';
+
+      if (mode === 'merge') {
+        const existIds = new Set(appState.listings.map(l => l.id));
+        const existTitles = new Set(appState.listings.map(l => l.title.trim()));
+        let added = 0;
+        normalized.forEach(item => {
+          if (!existIds.has(item.id) && !existTitles.has(item.title.trim())) {
+            appState.listings.push(item);
+            added++;
+          }
+        });
+        saveAppState();
+        showBackupStatus(`合并追加完成：新增 ${added} 套房源，跳过 ${normalized.length - added} 套重复房源`, 'success');
+        showToast(`已合并追加 ${added} 套房源`);
+      } else {
+        openConfirmModal(
+          '确认覆盖恢复？',
+          `将清空当前 ${appState.listings.length} 套房源，并替换为备份中的 ${normalized.length} 套房源与参数设置。`,
+          () => {
+            appState.listings = normalized;
+            if (parsed.settings) {
+              appState.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
+              updateHeaderSubtitle();
+            }
+            const rawSel = Array.isArray(parsed.selectedIds) ? parsed.selectedIds : (Array.isArray(parsed.finalistIds) ? parsed.finalistIds : []);
+            appState.selectedIds = rawSel.filter(id => appState.listings.some(l => l.id === id)).slice(0, 4);
+            if (appState.selectedIds.length === 0) {
+              appState.selectedIds = appState.listings.slice(0, 3).map(l => l.id);
+            }
+            saveAppState();
+            showBackupStatus(`覆盖恢复成功：已恢复 ${normalized.length} 套房源`, 'success');
+            showToast('数据已从备份完全覆盖恢复');
+          }
+        );
+      }
+    }
+
+    // ==================== 全局设置抽屉 & 灯箱 & 确认弹窗 & Toast ====================
+    function openSettingsModal() {
+      const s = appState.settings;
+      document.getElementById('set-city').value = s.city;
+      document.getElementById('set-destination').value = s.destination;
+      document.getElementById('set-hourlyRate').value = s.hourlyRate;
+      document.getElementById('set-workdays').value = s.workdays;
+      const modal = document.getElementById('settings-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function saveGlobalSettings(e) {
+      e.preventDefault();
+      appState.settings = {
+        city: document.getElementById('set-city').value.trim() || '重庆',
+        destination: document.getElementById('set-destination').value.trim() || '解放碑CBD',
+        hourlyRate: Math.max(0, Number(document.getElementById('set-hourlyRate').value) || 0),
+        workdays: Math.max(1, Number(document.getElementById('set-workdays').value) || 22)
+      };
+      updateHeaderSubtitle();
+      saveAppState();
+      closeSettingsModal();
+      if (appState.activeView === 'listings') renderListingsView();
+      if (appState.activeView === 'compare') renderCompareView();
+      showToast('通勤与算账参数已更新');
+    }
+
+    function openLightboxForListing(id, index = 0) {
+      const item = appState.listings.find(l => l.id === id);
+      if (!item || !item.photos || item.photos.length === 0) return;
+      lightboxState = {
+        title: item.title,
+        photos: item.photos,
+        index: Math.max(0, Math.min(index, item.photos.length - 1))
+      };
+      updateLightboxUI();
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function updateLightboxUI() {
+      const { title, photos, index } = lightboxState;
+      const cur = photos[index];
+      document.getElementById('lb-title').textContent = title;
+      document.getElementById('lb-caption').textContent = cur.caption || '房间实拍';
+      document.getElementById('lb-counter').textContent = `${index + 1} / ${photos.length}`;
+      document.getElementById('lb-image').src = cur.dataUrl;
+
+      document.getElementById('lb-thumbs').innerHTML = photos.map((p, i) => `
+        <button type="button" onclick="lightboxState.index=${i}; updateLightboxUI();" class="btn-tactile w-14 h-10 rounded-lg overflow-hidden border-2 shrink-0 ${i === index ? 'border-white opacity-100' : 'border-transparent opacity-45 hover:opacity-80'}">
+          <img src="${p.dataUrl}" alt="缩略图" class="w-full h-full object-cover" />
+        </button>
+      `).join('');
+    }
+
+    function stepLightbox(delta) {
+      const len = lightboxState.photos.length;
+      if (len <= 1) return;
+      lightboxState.index = (lightboxState.index + delta + len) % len;
+      updateLightboxUI();
+    }
+
+    function closeLightbox() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function openConfirmModal(title, message, onConfirm) {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-message').textContent = message;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      document.getElementById('confirm-cancel-btn').onclick = closeConfirmModal;
+      document.getElementById('confirm-ok-btn').onclick = () => {
+        closeConfirmModal();
+        if (typeof onConfirm === 'function') onConfirm();
+      };
+    }
+
+    function closeConfirmModal() {
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = 'animate-toast pointer-events-auto px-4 py-2.5 rounded-xl bg-zinc-900 text-white text-xs font-medium shadow-float border border-white/10';
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 220ms ease';
+        setTimeout(() => el.remove(), 240);
+      }, 2800);
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeAttr(str) {
+      return escapeHtml(str).replace(/'/g, "\\'");
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
